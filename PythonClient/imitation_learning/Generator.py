@@ -142,18 +142,16 @@ class DriveDataGenerator(image.ImageDataGenerator):
             x = image.random_channel_shift(x,
                                      self.channel_shift_range,
                                      img_channel_axis)
-        if self.horizontal_flip:
-            if np.random.random() < 0.5:
-                x = image.flip_axis(x, img_col_axis)
-                is_image_horizontally_flipped = True
+        if self.horizontal_flip and np.random.random() < 0.5:
+            x = image.flip_axis(x, img_col_axis)
+            is_image_horizontally_flipped = True
 
-        if self.vertical_flip:
-            if np.random.random() < 0.5:
-                x = image.flip_axis(x, img_row_axis)
-                
+        if self.vertical_flip and np.random.random() < 0.5:
+            x = image.flip_axis(x, img_row_axis)
+
         if self.brighten_range != 0:
             random_bright = np.random.uniform(low = 1.0-self.brighten_range, high=1.0+self.brighten_range)
-            
+
             img = cv2.cvtColor(x, cv2.COLOR_RGB2HSV)
             img[:, :, 2] = np.clip(img[:, :, 2] * random_bright, 0, 255)
             x = cv2.cvtColor(img, cv2.COLOR_HSV2RGB)
@@ -196,12 +194,12 @@ class DriveIterator(image.Iterator):
 
         if data_format is None:
             data_format = K.image_data_format()
-        
+
         self.x_images = x_images
-        
+
         self.zero_drop_percentage = zero_drop_percentage
         self.roi = roi
-        
+
         if self.x_images.ndim != 4:
             raise ValueError('Input data in `NumpyArrayIterator` '
                              'should ave rank 4. You passed an array '
@@ -214,15 +212,8 @@ class DriveIterator(image.Iterator):
                              'either 1, 3 or 4 channels on axis ' + str(channels_axis) + '. '
                              'However, it was passed an array with shape ' + str(self.x_images.shape) +
                              ' (' + str(self.x_images.shape[channels_axis]) + ' channels).')
-        if x_prev_states is not None:
-            self.x_prev_states = x_prev_states
-        else:
-            self.x_prev_states = None
-
-        if y is not None:
-            self.y = y
-        else:
-            self.y = None
+        self.x_prev_states = x_prev_states if x_prev_states is not None else None
+        self.y = y if y is not None else None
         self.image_data_generator = image_data_generator
         self.data_format = data_format
         self.save_to_dir = save_to_dir
@@ -257,16 +248,16 @@ class DriveIterator(image.Iterator):
 
         if self.roi is not None:
             batch_x_images = batch_x_images[:, self.roi[0]:self.roi[1], self.roi[2]:self.roi[3], :]
-            
+
         used_indexes = []
         is_horiz_flipped = []
         for i, j in enumerate(index_array):
             x_images = self.x_images[j]            
-            
+
             if self.roi is not None:
                 x_images = x_images[self.roi[0]:self.roi[1], self.roi[2]:self.roi[3], :]
-                
-                
+
+
             transformed = self.image_data_generator.random_transform_with_states(x_images.astype(K.floatx()))
             x_images = transformed[0]
             is_horiz_flipped.append(transformed[1])
@@ -275,23 +266,23 @@ class DriveIterator(image.Iterator):
 
             if self.x_prev_states is not None:
                 x_prev_states = self.x_prev_states[j]
-                
+
                 if (transformed[1]):
                     x_prev_states[0] *= -1.0
-                
+
                 batch_x_prev_states[i] = x_prev_states
-            
+
             used_indexes.append(j)
 
         if self.x_prev_states is not None:
             batch_x = [np.asarray(batch_x_images)]
         else:
             batch_x = np.asarray(batch_x_images)
-            
+
         if self.save_to_dir:
             for i in range(0, self.batch_size, 1):
                 hash = np.random.randint(1e4)
-               
+
                 img = image.array_to_img(batch_x_images[i], self.data_format, scale=True)
                 fname = '{prefix}_{index}_{hash}.{format}'.format(prefix=self.save_prefix,
                                                                         index=1,
@@ -305,7 +296,7 @@ class DriveIterator(image.Iterator):
         num_of_non_close_samples = 0
         for i in range(0, len(is_horiz_flipped), 1):
             if batch_y.shape[1] == 1:
-                
+
                 if (is_horiz_flipped[i]):
                     batch_y[i] *= -1
 
@@ -320,21 +311,21 @@ class DriveIterator(image.Iterator):
                     idx.append(True)
             else:
                 
-                if (batch_y[i][int(len(batch_y[i])/2)] == 1):
+                if batch_y[i][len(batch_y[i]) // 2] == 1:
                     if (np.random.uniform(low=0, high=1) > self.zero_drop_percentage):
                         idx.append(True)
                     else:
                         idx.append(False)
                 else:
                     idx.append(True)
-                
+
                 if (is_horiz_flipped[i]):
                     batch_y[i] = batch_y[i][::-1]
 
         batch_y = batch_y[idx]
         batch_x[0] = batch_x[0][idx]
-        
-        
+
+
         return batch_x, batch_y
         
     def _get_batches_of_transformed_samples(self, index_array):
